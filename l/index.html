@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#2f9e6e">
+<title>Pantrylight – shopping list</title>
+<style>
+  :root { --bg:#f3f5f0; --card:#fff; --ink:#1d2a24; --muted:#6f7d75; --line:#dfe5dc; --accent:#2f9e6e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111714; --card:#1e2723; --ink:#eef3ef; --muted:#94a39a; --line:#2e3a34; } }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { position:sticky; top:0; background:var(--bg); padding:18px 18px 10px; display:flex; align-items:center; gap:12px; z-index:1; }
+  h1 { font-size:24px; margin:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .count { font-weight:700; color:var(--accent); font-size:18px; }
+  main { padding:0 14px 110px; max-width:640px; margin:0 auto; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 6px 8px; }
+  label { display:flex; align-items:center; gap:14px; background:var(--card); border-radius:16px; padding:14px 16px; margin:8px 0;
+          box-shadow:0 2px 8px rgba(0,0,0,.05); cursor:pointer; user-select:none; }
+  input[type=checkbox] { appearance:none; width:28px; height:28px; border:3px solid var(--line); border-radius:9px; flex:none; display:grid; place-items:center; margin:0; }
+  input[type=checkbox]:checked { background:var(--accent); border-color:var(--accent); }
+  input[type=checkbox]:checked::after { content:"✓"; color:#fff; font-weight:800; font-size:18px; }
+  .name { flex:1; font-weight:600; }
+  .qty { color:var(--muted); font-size:15px; }
+  label.done .name { text-decoration:line-through; color:var(--muted); font-weight:400; }
+  footer { position:fixed; left:0; right:0; bottom:0; padding:12px 14px calc(12px + env(safe-area-inset-bottom)); background:var(--bg); display:flex; gap:10px; justify-content:center; }
+  button { border:0; border-radius:40px; padding:14px 20px; font:600 16px system-ui, sans-serif; background:var(--card); color:var(--ink); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  button.main { background:var(--accent); color:#fff; }
+  .msg { text-align:center; color:var(--muted); padding:60px 20px; }
+  .note { text-align:center; color:var(--muted); font-size:13px; margin:28px 10px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">Pantrylight</h1><span class="count" id="count"></span></header>
+<main id="list"><p class="msg" id="msg"></p></main>
+<footer><button id="copy"></button><button class="main" id="reset"></button></footer>
+<script>
+// Liste de courses envoyée par l'appli Pantrylight (QR code). La liste est dans l'adresse, après « # » :
+// cette partie n'est jamais envoyée au serveur. Les cases cochées sont gardées sur ce téléphone (localStorage).
+const T = {
+  en: {copy:"Copy", copied:"Copied", reset:"Uncheck all", empty:"Nothing to buy.", bad:"This link does not contain a Pantrylight list. Scan the QR code again.", note:"Sent from Pantrylight. Your list stays on this phone: nothing is stored online."},
+  fr: {copy:"Copier", copied:"Copié", reset:"Tout décocher", empty:"Rien à acheter.", bad:"Ce lien ne contient pas de liste Pantrylight. Scannez à nouveau le QR code.", note:"Envoyé depuis Pantrylight. Votre liste reste sur ce téléphone : rien n'est enregistré en ligne."},
+  de: {copy:"Kopieren", copied:"Kopiert", reset:"Alle abwählen", empty:"Nichts zu kaufen.", bad:"Dieser Link enthält keine Pantrylight-Liste. Scanne den QR-Code erneut.", note:"Von Pantrylight gesendet. Deine Liste bleibt auf diesem Handy: Nichts wird online gespeichert."},
+  es: {copy:"Copiar", copied:"Copiado", reset:"Desmarcar todo", empty:"Nada que comprar.", bad:"Este enlace no contiene una lista de Pantrylight. Vuelve a escanear el código QR.", note:"Enviado desde Pantrylight. Tu lista se queda en este teléfono: nada se guarda en línea."},
+  it: {copy:"Copia", copied:"Copiato", reset:"Deseleziona tutto", empty:"Niente da comprare.", bad:"Questo link non contiene una lista Pantrylight. Scansiona di nuovo il codice QR.", note:"Inviato da Pantrylight. La lista resta su questo telefono: niente viene salvato online."},
+  pt: {copy:"Copiar", copied:"Copiado", reset:"Desmarcar tudo", empty:"Nada para comprar.", bad:"Este link não contém uma lista do Pantrylight. Leia o código QR novamente.", note:"Enviado pelo Pantrylight. A sua lista fica neste telemóvel: nada é guardado online."},
+  nl: {copy:"Kopiëren", copied:"Gekopieerd", reset:"Alles uitvinken", empty:"Niets te kopen.", bad:"Deze link bevat geen Pantrylight-lijst. Scan de QR-code opnieuw.", note:"Verstuurd vanuit Pantrylight. Je lijst blijft op deze telefoon: er wordt niets online opgeslagen."},
+  pl: {copy:"Kopiuj", copied:"Skopiowano", reset:"Odznacz wszystko", empty:"Nic do kupienia.", bad:"Ten link nie zawiera listy Pantrylight. Zeskanuj kod QR ponownie.", note:"Wysłane z Pantrylight. Lista zostaje na tym telefonie: nic nie jest zapisywane w sieci."},
+  cs: {copy:"Kopírovat", copied:"Zkopírováno", reset:"Odškrtnout vše", empty:"Nic k nákupu.", bad:"Tento odkaz neobsahuje seznam Pantrylight. Naskenujte QR kód znovu.", note:"Odesláno z Pantrylight. Seznam zůstává v tomto telefonu: nic se neukládá online."},
+  ru: {copy:"Копировать", copied:"Скопировано", reset:"Снять все отметки", empty:"Покупать нечего.", bad:"В этой ссылке нет списка Pantrylight. Отсканируйте QR-код ещё раз.", note:"Отправлено из Pantrylight. Список остаётся на этом телефоне: ничего не сохраняется в интернете."},
+  kk: {copy:"Көшіру", copied:"Көшірілді", reset:"Барлық белгіні алу", empty:"Сатып алатын ештеңе жоқ.", bad:"Бұл сілтемеде Pantrylight тізімі жоқ. QR кодты қайта сканерлеңіз.", note:"Pantrylight-тан жіберілді. Тізім осы телефонда қалады: интернетте ештеңе сақталмайды."},
+  el: {copy:"Αντιγραφή", copied:"Αντιγράφηκε", reset:"Αποεπιλογή όλων", empty:"Τίποτα για αγορά.", bad:"Αυτός ο σύνδεσμος δεν περιέχει λίστα Pantrylight. Σαρώστε ξανά τον κωδικό QR.", note:"Στάλθηκε από το Pantrylight. Η λίστα μένει σε αυτό το τηλέφωνο: τίποτα δεν αποθηκεύεται online."},
+  vi: {copy:"Sao chép", copied:"Đã sao chép", reset:"Bỏ chọn tất cả", empty:"Không có gì cần mua.", bad:"Liên kết này không chứa danh sách Pantrylight. Hãy quét lại mã QR.", note:"Gửi từ Pantrylight. Danh sách chỉ ở trên điện thoại này: không có gì được lưu trực tuyến."},
+  zh: {copy:"复制", copied:"已复制", reset:"全部取消勾选", empty:"没有要买的东西。", bad:"此链接不包含 Pantrylight 清单。请重新扫描二维码。", note:"由 Pantrylight 发送。清单只保存在这部手机上，不会上传到网络。"},
+  ja: {copy:"コピー", copied:"コピーしました", reset:"すべてのチェックを外す", empty:"買うものはありません。", bad:"このリンクには Pantrylight のリストが含まれていません。QRコードをもう一度読み取ってください。", note:"Pantrylight から送信。リストはこのスマホにだけ保存され、ネットには保存されません。"},
+  ko: {copy:"복사", copied:"복사됨", reset:"모두 체크 해제", empty:"살 것이 없습니다.", bad:"이 링크에는 Pantrylight 목록이 없습니다. QR 코드를 다시 스캔하세요.", note:"Pantrylight에서 보냄. 목록은 이 휴대폰에만 남고 온라인에 저장되지 않습니다."},
+  hi: {copy:"कॉपी करें", copied:"कॉपी हो गया", reset:"सब अनचेक करें", empty:"खरीदने को कुछ नहीं।", bad:"इस लिंक में Pantrylight सूची नहीं है। QR कोड फिर से स्कैन करें।", note:"Pantrylight से भेजा गया। आपकी सूची इसी फ़ोन पर रहती है: कुछ भी ऑनलाइन सेव नहीं होता।"},
+  ar: {copy:"نسخ", copied:"تم النسخ", reset:"إلغاء تحديد الكل", empty:"لا شيء للشراء.", bad:"هذا الرابط لا يحتوي على قائمة Pantrylight. امسح رمز QR مرة أخرى.", note:"أُرسلت من Pantrylight. تبقى قائمتك على هذا الهاتف: لا يُحفظ أي شيء على الإنترنت."},
+  he: {copy:"העתקה", copied:"הועתק", reset:"ביטול כל הסימונים", empty:"אין מה לקנות.", bad:"הקישור הזה לא מכיל רשימת Pantrylight. סרקו שוב את קוד ה-QR.", note:"נשלח מ-Pantrylight. הרשימה נשארת בטלפון הזה: שום דבר לא נשמר ברשת."},
+  tl: {copy:"Kopyahin", copied:"Nakopya", reset:"Alisin lahat ng tsek", empty:"Walang bibilhin.", bad:"Walang listahan ng Pantrylight sa link na ito. I-scan muli ang QR code.", note:"Ipinadala mula sa Pantrylight. Nasa teleponong ito lang ang listahan mo: walang nakaimbak online."},
+  kw: {copy:"Dasskrifa", copied:"Dasskrifys", reset:"Dilea pub merk", empty:"Travydh dhe brena.", bad:"Ny syns an kevren ma rol Pantrylight. Skannyewgh an kod QR arta.", note:"Danvenys a Pantrylight. Agas rol a dryg y'n pellgowser ma: travydh ny vydh gwithys warlinen."},
+};
+const lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+const L = T[lang] || T.en;
+document.documentElement.lang = lang;
+if (lang === "ar" || lang === "he") document.documentElement.dir = "rtl";
+
+function b64urlToBytes(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function decode(hash) {
+  const kind = hash[0], bytes = b64urlToBytes(hash.slice(1));
+  if (kind === "t") return new TextDecoder().decode(bytes);
+  if (kind === "z") {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(stream).text();
+  }
+  throw new Error("format");
+}
+function storageKey() { return "pantrylight:" + location.hash.slice(0, 120); }
+function loadChecked() { try { return JSON.parse(localStorage.getItem(storageKey()) || "[]"); } catch (e) { return []; } }
+function saveChecked(a) { try { localStorage.setItem(storageKey(), JSON.stringify(a)); } catch (e) {} }
+
+let plain = "";
+async function render() {
+  const list = document.getElementById("list");
+  const msg = document.getElementById("msg");
+  document.getElementById("copy").textContent = L.copy;
+  document.getElementById("reset").textContent = L.reset;
+  let text;
+  try { text = await decode(location.hash.slice(1)); } catch (e) { msg.textContent = L.bad; return; }
+  const checked = new Set(loadChecked());
+  list.innerHTML = "";
+  let n = 0, idx = 0;
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (line.startsWith("!")) { document.getElementById("title").textContent = line.slice(1); document.title = line.slice(1); out.push(line.slice(1)); }
+    else if (line.startsWith("#")) { const h = document.createElement("h2"); h.textContent = line.slice(1); list.appendChild(h); out.push("", line.slice(1)); }
+    else if (line.startsWith("-")) {
+      const [name, qty] = line.slice(1).split("|");
+      const id = idx++;
+      const lab = document.createElement("label");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked.has(id);
+      const nm = document.createElement("span"); nm.className = "name"; nm.textContent = name;
+      lab.append(cb, nm);
+      if (qty) { const q = document.createElement("span"); q.className = "qty"; q.textContent = qty; lab.appendChild(q); }
+      lab.classList.toggle("done", cb.checked);
+      cb.addEventListener("change", () => {
+        cb.checked ? checked.add(id) : checked.delete(id);
+        lab.classList.toggle("done", cb.checked);
+        saveChecked([...checked]); count();
+      });
+      list.appendChild(lab); n++;
+      out.push("- " + name + (qty ? " (" + qty + ")" : ""));
+    }
+  }
+  plain = out.join("\n");
+  if (n === 0) { const p = document.createElement("p"); p.className = "msg"; p.textContent = L.empty; list.appendChild(p); }
+  const note = document.createElement("p"); note.className = "note"; note.textContent = L.note; list.appendChild(note);
+  function count() { document.getElementById("count").textContent = n ? (checked.size + " / " + n) : ""; }
+  count();
+  document.getElementById("reset").onclick = () => { checked.clear(); saveChecked([]); render(); };
+}
+document.getElementById("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(plain); document.getElementById("copy").textContent = L.copied; } catch (e) {}
+};
+window.addEventListener("hashchange", render);
+render();
+</script>
+</body>
+</html>
